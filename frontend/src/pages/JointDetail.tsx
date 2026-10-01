@@ -5,9 +5,12 @@ import { DifficultyTag } from '../components/common/DifficultyTag'
 import { SizeField } from '../components/common/SizeField'
 import { StepRail } from '../components/common/StepRail'
 import { useStepOrder } from '../hooks/useStepOrder'
+import { useDiagramStore } from '../stores/diagramStore'
+import { useFieldSyncStore } from '../stores/fieldSyncStore'
 import { useJointStore } from '../stores/jointStore'
 import { checkTolerance, formatDimension } from '../utils/measure'
 import { exportJointData } from '../utils/export'
+import { readJointRevision } from '../utils/fieldSync'
 
 export default function JointDetail() {
   const { id: idParam } = useParams()
@@ -18,17 +21,32 @@ export default function JointDetail() {
   const loading = useJointStore((state) => state.loading)
   const loadAll = useJointStore((state) => state.loadAll)
   const updateMemberDimensions = useJointStore((state) => state.updateMemberDimensions)
+  const loadSyncData = useFieldSyncStore((state) => state.loadSyncData)
+  const reviews = useFieldSyncStore((state) => state.reviews)
+  const exportField = useFieldSyncStore((state) => state.exportField)
   const { steps, totalDurationSec, currentStepIndex, move, setCurrentStep } = useStepOrder(id)
 
   useEffect(() => {
     void loadAll()
-  }, [loadAll])
+    void loadSyncData()
+  }, [loadAll, loadSyncData])
 
   const joint = joints.find((item) => item.id === id)
   const currentMembers = members
     .filter((member) => member.jointTypeId === id)
     .sort((a, b) => a.lengthMm - b.lengthMm)
+  const currentSteps = steps
+  const diagrams = useDiagramStore((state) => state.diagrams)
+  const loadDiagrams = useDiagramStore((state) => state.loadDiagrams)
+  const currentDiagrams = diagrams.filter((diagram) => diagram.jointTypeId === id)
   const currentFurniture = furniture.filter((item) => item.jointTypeId === id)
+  const pendingReviews = reviews.filter((item) => item.jointTypeId === id && item.status === 'pending')
+
+  useEffect(() => {
+    if (id) void loadDiagrams(id)
+  }, [id, loadDiagrams])
+
+  const revision = readJointRevision(joint, currentMembers, currentSteps, currentDiagrams, currentFurniture)
 
   if (!joint && !loading) {
     return (
@@ -58,6 +76,15 @@ export default function JointDetail() {
               <span className="rounded-full border border-wood-100 bg-white px-3 py-1 text-xs text-wood-700">{joint.family}</span>
               <DifficultyTag difficulty={joint.difficulty} />
               <span className="text-xs text-stone-500">{joint.glueNeeded ? '建议配合胶合' : '可拆式干装'}</span>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  revision.consistent ? 'bg-wood-50 text-wood-700' : 'bg-rose-50 text-rose-800'
+                }`}
+                title={revision.consistent ? '构件、步序、示意图、家具关联为同一修订' : '各资料修订号不一致，请处理待复核项'}
+                data-testid="joint-revision-badge"
+              >
+                统一修订 r{revision.rev}{revision.consistent ? '' : '（资料错位）'}
+              </span>
             </div>
             <h1 className="mt-5 text-3xl font-bold tracking-tight text-wood-900 sm:text-4xl">{joint.name} · 结构详情</h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-stone-600">{joint.strengthNote}</p>
@@ -72,8 +99,26 @@ export default function JointDetail() {
           <Link className="primary-button" to={`/joints/${joint.id}/steps`}>编排拆装步序</Link>
           <Link className="secondary-button" to={`/joints/${joint.id}/diagram`}>进入示意图绘制台</Link>
           <button type="button" className="secondary-button" onClick={() => void exportJointData(joint.id, joint.name)}>导出当前类型</button>
+          <button type="button" className="secondary-button" data-testid="export-field-snapshot" onClick={() => void exportField(joint.id)}>导出现场快照</button>
         </div>
       </section>
+
+      {pendingReviews.length > 0 ? (
+        <Link
+          to="/field"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900"
+          data-testid="joint-pending-review-banner"
+        >
+          <span>
+            该榫卯有 <strong>{pendingReviews.length}</strong> 项现场回传待复核
+            （尺寸冲突 {pendingReviews.filter((item) => item.kind === 'member-dimensions').length} ·
+            风险 {pendingReviews.filter((item) => item.kind === 'risk-note').length} ·
+            断点 {pendingReviews.filter((item) => item.kind === 'broken-step' || item.kind === 'broken-diagram').length}），
+            处理后详情、步序与家具反查将读到同一修订。
+          </span>
+          <span className="font-semibold underline-offset-4 hover:underline">前往对账 →</span>
+        </Link>
+      ) : null}
 
       <section className="space-y-4">
         <div className="flex items-end justify-between gap-4">

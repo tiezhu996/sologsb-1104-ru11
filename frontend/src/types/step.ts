@@ -12,4 +12,6 @@ export interface DisassemblyStep {
   riskNote: string
   holdSec: number
   schemaRev?: number
+  /** 统一修订号：与所属榫卯的类型、构件、示意图、家具保持一致 */
+  dataRev?: number
 }

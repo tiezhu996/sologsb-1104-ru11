@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
 import { StepRail } from '../components/common/StepRail'
 import { SvgCanvas } from '../components/common/SvgCanvas'
 import { useStepOrder } from '../hooks/useStepOrder'
 import { useDiagramStore } from '../stores/diagramStore'
+import { useFieldSyncStore } from '../stores/fieldSyncStore'
 import { useJointStore } from '../stores/jointStore'
 
 export default function StepBoard() {
@@ -16,16 +17,29 @@ export default function StepBoard() {
   const selectedMemberId = useDiagramStore((state) => state.selectedMemberId)
   const loadDiagrams = useDiagramStore((state) => state.loadDiagrams)
   const setSelectedMember = useDiagramStore((state) => state.setSelectedMember)
+  const riskNotes = useFieldSyncStore((state) => state.riskNotes)
+  const loadSyncData = useFieldSyncStore((state) => state.loadSyncData)
+  const addRiskNote = useFieldSyncStore((state) => state.addRiskNote)
   const { steps, totalDurationSec, currentStepIndex, move, setCurrentStep } = useStepOrder(id)
+  const [riskDraft, setRiskDraft] = useState('')
 
   useEffect(() => {
     void loadAll()
+    void loadSyncData()
     if (id) void loadDiagrams(id)
-  }, [id, loadAll, loadDiagrams])
+  }, [id, loadAll, loadDiagrams, loadSyncData])
 
   const joint = joints.find((item) => item.id === id)
   const currentStep = steps[currentStepIndex]
   const currentDiagram = diagrams.find((diagram) => diagram.stepId === currentStep?.id) ?? diagrams[0]
+  const stepRiskNotes = currentStep ? riskNotes.filter((note) => note.stepId === currentStep.id) : []
+
+  const submitRiskNote = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!currentStep || !riskDraft.trim()) return
+    await addRiskNote(currentStep.id, riskDraft)
+    setRiskDraft('')
+  }
 
   return (
     <div className="space-y-7">
@@ -83,6 +97,38 @@ export default function StepBoard() {
                 <p className="text-xs font-semibold text-amber-900">易损部位提醒</p>
                 <p className="mt-1 text-sm leading-6 text-amber-900/80">{currentStep?.riskNote ?? '暂无提醒'}</p>
               </div>
+
+              {currentStep ? (
+                <div className="mt-4 rounded-xl border border-wood-100 bg-white px-4 py-4" data-testid="field-risk-panel">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-wood-900">外场新增风险说明</p>
+                    <span className="rounded-full bg-wood-50 px-2 py-0.5 text-[11px] text-wood-700">{stepRiskNotes.length} 条</span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-4 text-stone-500">外场记录随导出快照固定版本，回店导入后保留为待复核项，不直接改正文。</p>
+                  {stepRiskNotes.length > 0 ? (
+                    <ul className="mt-3 space-y-2">
+                      {stepRiskNotes.map((note) => (
+                        <li key={note.id} className="rounded-lg bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900" data-testid="field-risk-note">
+                          {note.riskNote}
+                          <span className="mt-0.5 block text-[10px] text-amber-700/70">{new Date(note.notedAt).toLocaleString('zh-CN')}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <form className="mt-3 flex gap-2" onSubmit={(event) => void submitRiskNote(event)}>
+                    <input
+                      className="input-field flex-1"
+                      data-testid="field-risk-input"
+                      value={riskDraft}
+                      onChange={(event) => setRiskDraft(event.target.value)}
+                      placeholder="例如：现场湿度偏高，第2步退出阻力明显增大"
+                    />
+                    <button type="submit" className="secondary-button shrink-0" data-testid="field-risk-submit" disabled={!riskDraft.trim()}>
+                      记下风险
+                    </button>
+                  </form>
+                </div>
+              ) : null}
             </div>
 
             <SvgCanvas

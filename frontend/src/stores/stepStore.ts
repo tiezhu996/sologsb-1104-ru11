@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { DisassemblyStep } from '../types/step'
-import { db } from '../utils/db'
+import { bumpJointRevision, db } from '../utils/db'
 
 interface StepState {
   steps: DisassemblyStep[]
@@ -37,7 +37,11 @@ export const useStepStore = create<StepState>((set, get) => ({
     ordered.splice(to, 0, moved)
     const resequenced = ordered.map((step, index) => ({ ...step, seq: index + 1 }))
     set({ steps: resequenced, currentStepIndex: to })
+    const jointTypeId = moved.jointTypeId
     await db.steps.bulkPut(resequenced)
+    // 店内调序：该榫卯全部资料对齐到新的统一修订
+    const nextRev = await bumpJointRevision(jointTypeId)
+    set({ steps: resequenced.map((step) => ({ ...step, dataRev: nextRev })) })
   },
 
   setCurrentStep: (index) => set({

@@ -16,4 +16,6 @@ export interface Diagram {
   svgMarkup: string
   hitAreas: HitArea[]
   schemaRev?: number
+  /** 统一修订号：与所属榫卯的类型、构件、步序、家具保持一致 */
+  dataRev?: number
 }

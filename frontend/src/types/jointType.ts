@@ -10,4 +10,6 @@ export interface JointType {
   strengthNote: string
   glueNeeded: boolean
   schemaRev?: number
+  /** 统一修订号：同一榫卯下构件、步骤、示意图、家具与类型本身共用 */
+  dataRev?: number
 }

@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type { Diagram, HitArea } from '../types/diagram'
+import type { FieldImportBatch, FieldReviewItem, FieldRiskNote } from '../types/fieldSync'
 import type { Furniture } from '../types/furniture'
 import type { JointType } from '../types/jointType'
 import type { Member } from '../types/member'
@@ -11,6 +12,9 @@ export class MortiseDatabase extends Dexie {
   steps!: Table<DisassemblyStep, string>
   diagrams!: Table<Diagram, string>
   furniture!: Table<Furniture, string>
+  fieldBatches!: Table<FieldImportBatch, string>
+  fieldReviews!: Table<FieldReviewItem, string>
+  fieldRiskNotes!: Table<FieldRiskNote, string>
 
   constructor() {
     super('gbmortise-db')
@@ -38,6 +42,30 @@ export class MortiseDatabase extends Dexie {
       })
       await transaction.table<Furniture, string>('furniture').toCollection().modify((furniture) => {
         furniture.schemaRev = 2
+      })
+    })
+    // version(3)：现场回传。五类资料共用统一修订号 dataRev，
+    // 另建导入批次、待复核项、外场风险说明三张表。
+    this.version(3).stores({
+      ...schema,
+      fieldBatches: 'id, status, importedAt',
+      fieldReviews: 'id, batchId, jointTypeId, kind, status, stepId, memberId, diagramId',
+      fieldRiskNotes: 'id, stepId, notedAt',
+    }).upgrade(async (transaction) => {
+      await transaction.table<JointType, string>('joints').toCollection().modify((joint) => {
+        joint.dataRev = joint.dataRev ?? 3
+      })
+      await transaction.table<Member, string>('members').toCollection().modify((member) => {
+        member.dataRev = member.dataRev ?? 3
+      })
+      await transaction.table<DisassemblyStep, string>('steps').toCollection().modify((step) => {
+        step.dataRev = step.dataRev ?? 3
+      })
+      await transaction.table<Diagram, string>('diagrams').toCollection().modify((diagram) => {
+        diagram.dataRev = diagram.dataRev ?? 3
+      })
+      await transaction.table<Furniture, string>('furniture').toCollection().modify((furniture) => {
+        furniture.dataRev = furniture.dataRev ?? 3
       })
     })
   }
@@ -176,11 +204,11 @@ export const db = new MortiseDatabase()
 
 async function writeSeedData(): Promise<void> {
   await db.transaction('rw', [db.joints, db.members, db.steps, db.diagrams, db.furniture], async () => {
-    await db.joints.bulkAdd(jointSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.members.bulkAdd(memberSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.steps.bulkAdd(stepSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.diagrams.bulkAdd(diagramSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.furniture.bulkAdd(furnitureSeeds.map((item) => ({ ...item, schemaRev: 2 })))
+    await db.joints.bulkAdd(jointSeeds.map((item) => ({ ...item, schemaRev: 2, dataRev: 3 })))
+    await db.members.bulkAdd(memberSeeds.map((item) => ({ ...item, schemaRev: 2, dataRev: 3 })))
+    await db.steps.bulkAdd(stepSeeds.map((item) => ({ ...item, schemaRev: 2, dataRev: 3 })))
+    await db.diagrams.bulkAdd(diagramSeeds.map((item) => ({ ...item, schemaRev: 2, dataRev: 3 })))
+    await db.furniture.bulkAdd(furnitureSeeds.map((item) => ({ ...item, schemaRev: 2, dataRev: 3 })))
   })
 }
 
@@ -190,5 +218,36 @@ export async function ensureSeedData(): Promise<void> {
 }
 
 db.on('populate', () => writeSeedData())
+
+/**
+ * 把某一榫卯下的全部资料（类型、构件、步骤、示意图、家具关联）
+ * 推进到同一个新修订号。任何店内编辑或现场回传生效后都应调用，
+ * 保证详情、步序、家具反查读到同一修订。
+ */
+export async function bumpJointRevision(jointTypeId: string): Promise<number> {
+  return db.transaction(
+    'rw',
+    [db.joints, db.members, db.steps, db.diagrams, db.furniture],
+    async () => {
+      const [joint, members, steps, diagrams, furniture] = await Promise.all([
+        db.joints.get(jointTypeId),
+        db.members.where('jointTypeId').equals(jointTypeId).toArray(),
+        db.steps.where('jointTypeId').equals(jointTypeId).toArray(),
+        db.diagrams.where('jointTypeId').equals(jointTypeId).toArray(),
+        db.furniture.where('jointTypeId').equals(jointTypeId).toArray(),
+      ])
+      const current = [joint, ...members, ...steps, ...diagrams, ...furniture]
+        .reduce((max, item) => Math.max(max, item?.dataRev ?? 0), 0)
+      const next = Math.max(3, current + 1)
+
+      if (joint) await db.joints.put({ ...joint, dataRev: next })
+      await db.members.bulkPut(members.map((item) => ({ ...item, dataRev: next })))
+      await db.steps.bulkPut(steps.map((item) => ({ ...item, dataRev: next })))
+      await db.diagrams.bulkPut(diagrams.map((item) => ({ ...item, dataRev: next })))
+      await db.furniture.bulkPut(furniture.map((item) => ({ ...item, dataRev: next })))
+      return next
+    },
+  )
+}
 
 export type { HitArea }

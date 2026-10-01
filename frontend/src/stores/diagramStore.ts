@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Diagram } from '../types/diagram'
-import { db } from '../utils/db'
+import { bumpJointRevision, db } from '../utils/db'
 
 interface DiagramState {
   diagrams: Diagram[]
@@ -76,8 +76,12 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 
   saveDiagram: async (diagram) => {
     await db.diagrams.put(diagram)
+    // 店内改示意图：该榫卯全部资料对齐到新的统一修订
+    const nextRev = await bumpJointRevision(diagram.jointTypeId)
     set((state) => ({
-      diagrams: state.diagrams.map((item) => item.id === diagram.id ? diagram : item),
+      diagrams: state.diagrams
+        .map((item) => (item.jointTypeId === diagram.jointTypeId ? { ...item, dataRev: nextRev } : item))
+        .map((item) => (item.id === diagram.id ? { ...diagram, dataRev: nextRev } : item)),
       draftSvgMarkup: state.selectedDiagramId === diagram.id ? diagram.svgMarkup : state.draftSvgMarkup,
       draftTitle: state.selectedDiagramId === diagram.id ? diagram.title : state.draftTitle,
     }))

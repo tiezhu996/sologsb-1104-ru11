@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Furniture, FurnitureName } from '../types/furniture'
 import type { JointType } from '../types/jointType'
 import type { Member } from '../types/member'
-import { db, ensureSeedData } from '../utils/db'
+import { bumpJointRevision, db, ensureSeedData } from '../utils/db'
 
 export type JointDraft = Omit<JointType, 'id' | 'schemaRev'>
 export type FurnitureDraft = Omit<Furniture, 'id' | 'schemaRev'>
@@ -68,7 +68,7 @@ export const useJointStore = create<JointState>((set, get) => ({
   },
 
   addJoint: async (draft) => {
-    const joint: JointType = { ...draft, id: createId('joint'), schemaRev: 2 }
+    const joint: JointType = { ...draft, id: createId('joint'), schemaRev: 2, dataRev: 3 }
     await db.joints.add(joint)
     set((state) => ({
       joints: [...state.joints, joint].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
@@ -79,16 +79,48 @@ export const useJointStore = create<JointState>((set, get) => ({
   },
 
   addFurniture: async (draft) => {
-    const furniture: Furniture = { ...draft, id: createId('furniture'), schemaRev: 2 }
+    const furniture: Furniture = { ...draft, id: createId('furniture'), schemaRev: 2, dataRev: 3 }
     await db.furniture.add(furniture)
     set((state) => ({ furniture: [...state.furniture, furniture] }))
+    // 新增家具关联属于该榫卯资料变更，全部资料对齐到新的统一修订
+    const nextRev = await bumpJointRevision(furniture.jointTypeId)
+    set((state) => ({
+      furniture: state.furniture.map((item) => (
+        item.jointTypeId === furniture.jointTypeId ? { ...item, dataRev: nextRev } : item
+      )),
+      joints: state.joints.map((joint) => (
+        joint.id === furniture.jointTypeId ? { ...joint, dataRev: nextRev } : joint
+      )),
+      members: state.members.map((member) => (
+        member.jointTypeId === furniture.jointTypeId ? { ...member, dataRev: nextRev } : member
+      )),
+    }))
     return furniture
   },
 
   setSelectedJoint: (id) => set({ selectedJointId: id }),
 
   updateMemberDimensions: async (memberId, dimensions) => {
+    const target = await db.members.get(memberId)
     await db.members.update(memberId, dimensions)
+    if (target) {
+      // 店内改尺寸：推进统一修订，外场若仍带旧修订回传将进入待复核
+      const nextRev = await bumpJointRevision(target.jointTypeId)
+      set((state) => ({
+        members: state.members.map((member) => (
+          member.jointTypeId === target.jointTypeId ? { ...member, dataRev: nextRev } : member
+        )).map((member) => (
+          member.id === memberId ? { ...member, ...dimensions } : member
+        )),
+        joints: state.joints.map((joint) => (
+          joint.id === target.jointTypeId ? { ...joint, dataRev: nextRev } : joint
+        )),
+        furniture: state.furniture.map((item) => (
+          item.jointTypeId === target.jointTypeId ? { ...item, dataRev: nextRev } : item
+        )),
+      }))
+      return
+    }
     set((state) => ({
       members: state.members.map((member) => (
         member.id === memberId ? { ...member, ...dimensions } : member
@@ -97,7 +129,25 @@ export const useJointStore = create<JointState>((set, get) => ({
   },
 
   renameMember: async (memberId, name) => {
+    const target = await db.members.get(memberId)
     await db.members.update(memberId, { name })
+    if (target) {
+      const nextRev = await bumpJointRevision(target.jointTypeId)
+      set((state) => ({
+        members: state.members.map((member) => (
+          member.jointTypeId === target.jointTypeId ? { ...member, dataRev: nextRev } : member
+        )).map((member) => (
+          member.id === memberId ? { ...member, name } : member
+        )),
+        joints: state.joints.map((joint) => (
+          joint.id === target.jointTypeId ? { ...joint, dataRev: nextRev } : joint
+        )),
+        furniture: state.furniture.map((item) => (
+          item.jointTypeId === target.jointTypeId ? { ...item, dataRev: nextRev } : item
+        )),
+      }))
+      return
+    }
     set((state) => ({
       members: state.members.map((member) => (
         member.id === memberId ? { ...member, name } : member

@@ -14,4 +14,6 @@ export interface Member {
   toleranceMm: number
   note: string
   schemaRev?: number
+  /** 统一修订号：与所属榫卯的类型、步序、示意图、家具保持一致 */
+  dataRev?: number
 }

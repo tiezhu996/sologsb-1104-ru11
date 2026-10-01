@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
 import { DifficultyTag } from '../components/common/DifficultyTag'
 import { useJointStore } from '../stores/jointStore'
+import { useFieldSyncStore } from '../stores/fieldSyncStore'
 import type { JointDifficulty, JointFamily, JointName, JointType } from '../types/jointType'
 import { exportAllData } from '../utils/export'
 
@@ -32,6 +33,8 @@ export default function JointList() {
   const loading = useJointStore((state) => state.loading)
   const loadAll = useJointStore((state) => state.loadAll)
   const addJoint = useJointStore((state) => state.addJoint)
+  const loadSyncData = useFieldSyncStore((state) => state.loadSyncData)
+  const pendingReviewCount = useFieldSyncStore((state) => state.reviews.filter((item) => item.status === 'pending').length)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<JointFormState>(initialForm)
   const familyGroups = Array.from(new Set([...families, ...joints.map((joint) => joint.family)]))
@@ -39,7 +42,8 @@ export default function JointList() {
 
   useEffect(() => {
     void loadAll()
-  }, [loadAll])
+    void loadSyncData()
+  }, [loadAll, loadSyncData])
 
   const submitJoint = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -71,6 +75,14 @@ export default function JointList() {
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
             导出全部数据
           </button>
+          <Link
+            to="/field"
+            className="secondary-button"
+            data-testid="goto-field-sync"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
+            外场回传{pendingReviewCount > 0 ? <strong className="ml-1 text-amber-700">({pendingReviewCount} 待核)</strong> : null}
+          </Link>
           <button type="button" className="primary-button" data-testid="new-joint" onClick={() => setShowForm(true)}>
             <span className="text-lg leading-none">＋</span>
             新建榫卯类型

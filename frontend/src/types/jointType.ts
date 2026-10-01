@@ -10,4 +10,5 @@ export interface JointType {
   strengthNote: string
   glueNeeded: boolean
   schemaRev?: number
+  dataRev: number
 }

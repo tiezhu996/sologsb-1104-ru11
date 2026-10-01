@@ -8,4 +8,5 @@ export interface Furniture {
   position: string
   loadNote: string
   schemaRev?: number
+  dataRev: number
 }

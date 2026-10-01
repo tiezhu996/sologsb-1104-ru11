@@ -16,4 +16,5 @@ export interface Diagram {
   svgMarkup: string
   hitAreas: HitArea[]
   schemaRev?: number
+  dataRev: number
 }

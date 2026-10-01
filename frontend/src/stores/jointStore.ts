@@ -3,9 +3,10 @@ import type { Furniture, FurnitureName } from '../types/furniture'
 import type { JointType } from '../types/jointType'
 import type { Member } from '../types/member'
 import { db, ensureSeedData } from '../utils/db'
+import { putWithRev } from '../utils/revision'
 
-export type JointDraft = Omit<JointType, 'id' | 'schemaRev'>
-export type FurnitureDraft = Omit<Furniture, 'id' | 'schemaRev'>
+export type JointDraft = Omit<JointType, 'id' | 'schemaRev' | 'dataRev'>
+export type FurnitureDraft = Omit<Furniture, 'id' | 'schemaRev' | 'dataRev'>
 
 interface JointState {
   joints: JointType[]
@@ -14,7 +15,7 @@ interface JointState {
   stepCounts: Record<string, number>
   selectedJointId: string | null
   loading: boolean
-  loadAll: () => Promise<void>
+  loadAll: (force?: boolean) => Promise<void>
   addJoint: (draft: JointDraft) => Promise<JointType>
   addFurniture: (draft: FurnitureDraft) => Promise<Furniture>
   setSelectedJoint: (id: string) => void
@@ -37,8 +38,8 @@ export const useJointStore = create<JointState>((set, get) => ({
   selectedJointId: null,
   loading: false,
 
-  loadAll: async () => {
-    if (get().loading) return
+  loadAll: async (force = false) => {
+    if (get().loading && !force) return
     set({ loading: true })
     try {
       await ensureSeedData()
@@ -68,8 +69,7 @@ export const useJointStore = create<JointState>((set, get) => ({
   },
 
   addJoint: async (draft) => {
-    const joint: JointType = { ...draft, id: createId('joint'), schemaRev: 2 }
-    await db.joints.add(joint)
+    const { entity: joint } = await putWithRev({ ...draft, id: createId('joint'), schemaRev: 2 } as JointType)
     set((state) => ({
       joints: [...state.joints, joint].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
       selectedJointId: joint.id,
@@ -79,8 +79,7 @@ export const useJointStore = create<JointState>((set, get) => ({
   },
 
   addFurniture: async (draft) => {
-    const furniture: Furniture = { ...draft, id: createId('furniture'), schemaRev: 2 }
-    await db.furniture.add(furniture)
+    const { entity: furniture } = await putWithRev({ ...draft, id: createId('furniture'), schemaRev: 2 } as Furniture)
     set((state) => ({ furniture: [...state.furniture, furniture] }))
     return furniture
   },
@@ -88,19 +87,23 @@ export const useJointStore = create<JointState>((set, get) => ({
   setSelectedJoint: (id) => set({ selectedJointId: id }),
 
   updateMemberDimensions: async (memberId, dimensions) => {
-    await db.members.update(memberId, dimensions)
+    const current = get().members.find((member) => member.id === memberId)
+    if (!current) return
+    const { entity: updated } = await putWithRev({ ...current, ...dimensions })
     set((state) => ({
       members: state.members.map((member) => (
-        member.id === memberId ? { ...member, ...dimensions } : member
+        member.id === memberId ? updated : member
       )),
     }))
   },
 
   renameMember: async (memberId, name) => {
-    await db.members.update(memberId, { name })
+    const current = get().members.find((member) => member.id === memberId)
+    if (!current) return
+    const { entity: updated } = await putWithRev({ ...current, name })
     set((state) => ({
       members: state.members.map((member) => (
-        member.id === memberId ? { ...member, name } : member
+        member.id === memberId ? updated : member
       )),
     }))
   },

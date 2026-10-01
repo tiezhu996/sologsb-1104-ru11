@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:logic": "esbuild scripts/verify-reconcile.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify-reconcile.mjs && node node_modules/.cache/verify-reconcile.mjs",
+    "test:engine": "esbuild scripts/verify-sync-engine.mts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify-sync-engine.mjs && node node_modules/.cache/verify-sync-engine.mjs",
+    "test:render": "esbuild scripts/verify-render.mts --bundle --loader:.mts=tsx --platform=node --format=cjs --outfile=node_modules/.cache/verify-render.cjs && node node_modules/.cache/verify-render.cjs",
+    "test": "npm run test:logic && npm run test:engine && npm run test:render"
   },
   "dependencies": {
     "dexie": "^4.0.8",
@@ -20,6 +24,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
+    "fake-indexeddb": "^6.2.5",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2",

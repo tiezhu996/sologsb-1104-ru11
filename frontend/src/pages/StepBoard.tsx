@@ -1,11 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
+import { RevisionBadge } from '../components/common/RevisionBadge'
 import { StepRail } from '../components/common/StepRail'
 import { SvgCanvas } from '../components/common/SvgCanvas'
 import { useStepOrder } from '../hooks/useStepOrder'
 import { useDiagramStore } from '../stores/diagramStore'
 import { useJointStore } from '../stores/jointStore'
+import { useStepStore } from '../stores/stepStore'
+import { useSyncStore } from '../stores/syncStore'
 
 export default function StepBoard() {
   const { id: idParam } = useParams()
@@ -14,18 +17,40 @@ export default function StepBoard() {
   const loadAll = useJointStore((state) => state.loadAll)
   const diagrams = useDiagramStore((state) => state.diagrams)
   const selectedMemberId = useDiagramStore((state) => state.selectedMemberId)
-  const loadDiagrams = useDiagramStore((state) => state.loadDiagrams)
   const setSelectedMember = useDiagramStore((state) => state.setSelectedMember)
+  const loadDiagrams = useDiagramStore((state) => state.loadDiagrams)
+  const updateStepRiskNote = useStepStore((state) => state.updateStepRiskNote)
+  const meta = useSyncStore((state) => state.meta)
+  const refreshMeta = useSyncStore((state) => state.refreshMeta)
   const { steps, totalDurationSec, currentStepIndex, move, setCurrentStep } = useStepOrder(id)
+  const [riskDraft, setRiskDraft] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     void loadAll()
     if (id) void loadDiagrams(id)
-  }, [id, loadAll, loadDiagrams])
+    void refreshMeta()
+  }, [id, loadAll, loadDiagrams, refreshMeta])
 
   const joint = joints.find((item) => item.id === id)
   const currentStep = steps[currentStepIndex]
+
+  useEffect(() => {
+    setRiskDraft(currentStep?.riskNote ?? '')
+  }, [currentStep?.id, currentStep?.riskNote])
+
   const currentDiagram = diagrams.find((diagram) => diagram.stepId === currentStep?.id) ?? diagrams[0]
+
+  const saveRiskNote = async () => {
+    if (!currentStep) return
+    setSaving(true)
+    try {
+      await updateStepRiskNote(currentStep.id, riskDraft.trim())
+      await refreshMeta()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-7">
@@ -38,9 +63,13 @@ export default function StepBoard() {
       <section className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="mb-2 text-xs font-semibold tracking-[0.24em] text-wood-500">STEP SEQUENCE</p>
-          <h1 className="text-3xl font-bold tracking-tight text-wood-900 sm:text-4xl">{joint?.name ?? '榫卯'} · 拆装步序编排</h1>
+          <h1 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-wood-900 sm:text-4xl">
+            {joint?.name ?? '榫卯'} · 拆装步序编排
+            <RevisionBadge committedRev={meta.jointRevs[id]} headDataRev={meta.headDataRev} />
+          </h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-stone-600">
             拖动左侧步骤调整真实顺序，右侧同步查看每一步的示意图和风险提醒。
+            {meta.fieldMode ? ' 外场模式下可就地补记风险说明，回店对账时自动保留。' : ''}
           </p>
         </div>
         <div className="rounded-xl border border-wood-100 bg-white px-5 py-3 text-sm text-stone-600 shadow-sm">
@@ -80,8 +109,29 @@ export default function StepBoard() {
                 </div>
               </div>
               <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50/70 px-4 py-3">
-                <p className="text-xs font-semibold text-amber-900">易损部位提醒</p>
-                <p className="mt-1 text-sm leading-6 text-amber-900/80">{currentStep?.riskNote ?? '暂无提醒'}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-amber-900">易损部位提醒{meta.fieldMode ? '（外场补记）' : ''}</p>
+                  <span className="text-[11px] text-amber-700/80">记录修订 R{currentStep?.dataRev ?? meta.headDataRev}</span>
+                </div>
+                <textarea
+                  rows={3}
+                  className="mt-2 w-full resize-y rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-sm leading-6 text-amber-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                  data-testid="risk-note-editor"
+                  value={riskDraft}
+                  onChange={(event) => setRiskDraft(event.target.value)}
+                  placeholder="记录现场观察到的易损部位与拆装风险"
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    className="primary-button !bg-amber-700 px-3 py-1.5 text-xs hover:!bg-amber-800"
+                    data-testid="risk-note-save"
+                    disabled={!currentStep || saving || riskDraft.trim() === (currentStep?.riskNote ?? '')}
+                    onClick={() => void saveRiskNote()}
+                  >
+                    保存风险说明
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -14,4 +14,5 @@ export interface Member {
   toleranceMm: number
   note: string
   schemaRev?: number
+  dataRev: number
 }

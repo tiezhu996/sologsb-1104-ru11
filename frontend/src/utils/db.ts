@@ -4,6 +4,9 @@ import type { Furniture } from '../types/furniture'
 import type { JointType } from '../types/jointType'
 import type { Member } from '../types/member'
 import type { DisassemblyStep } from '../types/step'
+import type { ReviewItem, SyncBatch, SyncMeta } from '../types/sync'
+
+export const SEED_DATA_REV = 1
 
 export class MortiseDatabase extends Dexie {
   joints!: Table<JointType, string>
@@ -11,6 +14,9 @@ export class MortiseDatabase extends Dexie {
   steps!: Table<DisassemblyStep, string>
   diagrams!: Table<Diagram, string>
   furniture!: Table<Furniture, string>
+  syncBatches!: Table<SyncBatch, string>
+  reviewItems!: Table<ReviewItem, string>
+  syncMeta!: Table<SyncMeta, string>
 
   constructor() {
     super('gbmortise-db')
@@ -39,6 +45,21 @@ export class MortiseDatabase extends Dexie {
       await transaction.table<Furniture, string>('furniture').toCollection().modify((furniture) => {
         furniture.schemaRev = 2
       })
+    })
+    this.version(3).stores({
+      ...schema,
+      syncBatches: 'id, batchId, status, importedAt',
+      reviewItems: 'id, batchId, status, jointTypeId, entityType, kind',
+      syncMeta: 'id',
+    }).upgrade(async (transaction) => {
+      const stamp = <T extends { dataRev?: number }>(record: T): void => {
+        record.dataRev = SEED_DATA_REV
+      }
+      await transaction.table<JointType, string>('joints').toCollection().modify(stamp)
+      await transaction.table<Member, string>('members').toCollection().modify(stamp)
+      await transaction.table<DisassemblyStep, string>('steps').toCollection().modify(stamp)
+      await transaction.table<Diagram, string>('diagrams').toCollection().modify(stamp)
+      await transaction.table<Furniture, string>('furniture').toCollection().modify(stamp)
     })
   }
 }
@@ -71,7 +92,7 @@ function makeSeedSvg(title: string, memberIds: [string, string, string], labels:
 </svg>`
 }
 
-const memberSeeds: Member[] = [
+const memberSeeds: Omit<Member, 'dataRev'>[] = [
   { id: 'member-dt-tenon', jointTypeId: 'joint-dovetail', name: '榫头', part: '出榫件', grainDir: '顺纹', lengthMm: 128, widthMm: 54, thicknessMm: 28, toleranceMm: 0.15, note: '燕尾斜面须顺纹修切，肩部保留铅笔线。' },
   { id: 'member-dt-socket', jointTypeId: 'joint-dovetail', name: '榫眼', part: '受榫件', grainDir: '横纹', lengthMm: 126, widthMm: 52, thicknessMm: 30, toleranceMm: 0.18, note: '眼口略收，试装以木槌轻推为准。' },
   { id: 'member-dt-frame', jointTypeId: 'joint-dovetail', name: '大边', part: '受榫件', grainDir: '顺纹', lengthMm: 680, widthMm: 72, thicknessMm: 34, toleranceMm: 0.2, note: '长料纹理连续，端面垂直于基准边。' },
@@ -86,7 +107,7 @@ const memberSeeds: Member[] = [
   { id: 'member-bs-rail', jointTypeId: 'joint-shoulder', name: '抹头', part: '出榫件', grainDir: '横纹', lengthMm: 470, widthMm: 50, thicknessMm: 30, toleranceMm: 0.17, note: '肩线随圆材弧度修配，避免硬压。' },
 ]
 
-const stepSeeds: DisassemblyStep[] = [
+const stepSeeds: Omit<DisassemblyStep, 'dataRev'>[] = [
   { id: 'step-dt-1', jointTypeId: 'joint-dovetail', seq: 1, action: '拆卸', direction: '轴向', tool: '木槌', riskNote: '先垫软木再轻敲榫肩，避免压伤外露木纹。', holdSec: 6 },
   { id: 'step-dt-2', jointTypeId: 'joint-dovetail', seq: 2, action: '拆卸', direction: '侧向', tool: '鱼线', riskNote: '沿燕尾斜面缓慢带出，不可强扭大边。', holdSec: 8 },
   { id: 'step-dt-3', jointTypeId: 'joint-dovetail', seq: 3, action: '装配', direction: '斜向', tool: '木槌', riskNote: '对准齿肩后顺纹推进，听到密实声即停。', holdSec: 7 },
@@ -101,7 +122,7 @@ const stepSeeds: DisassemblyStep[] = [
   { id: 'step-bs-3', jointTypeId: 'joint-shoulder', seq: 3, action: '装配', direction: '斜向', tool: '木槌', riskNote: '抱肩弧面完全贴服后再压实定位。', holdSec: 10 },
 ]
 
-const diagramSeeds: Diagram[] = [
+const diagramSeeds: Omit<Diagram, 'dataRev'>[] = [
   {
     id: 'diagram-dovetail',
     jointTypeId: 'joint-dovetail',
@@ -156,14 +177,14 @@ const diagramSeeds: Diagram[] = [
   },
 ]
 
-const jointSeeds: JointType[] = [
+const jointSeeds: Omit<JointType, 'dataRev'>[] = [
   { id: 'joint-dovetail', name: '燕尾榫', family: '出头', difficulty: '入门', strengthNote: '齿肩互锁，抵抗水平拉脱，同时允许木材轻微呼吸。', glueNeeded: false },
   { id: 'joint-mitre', name: '格肩榫', family: '闷榫', difficulty: '进阶', strengthNote: '暗榫承担拉力，格肩封闭端面，适合框料角部。', glueNeeded: true },
   { id: 'joint-corner', name: '粽角榫', family: '出头', difficulty: '高难', strengthNote: '三向互扣，节点刚度高，适合桌案与床架的角部。', glueNeeded: true },
   { id: 'joint-shoulder', name: '抱肩榫', family: '圆材', difficulty: '高难', strengthNote: '牙板抱合腿足，弧面分散压力并限制侧向晃动。', glueNeeded: false },
 ]
 
-const furnitureSeeds: Furniture[] = [
+const furnitureSeeds: Omit<Furniture, 'dataRev'>[] = [
   { id: 'furniture-quanyi', jointTypeId: 'joint-shoulder', name: '圈椅', era: '明式', position: '扶手与联帮棍交接处', loadNote: '抱肩弧面分担手臂压力，使圆材连接保持顺纹完整。' },
   { id: 'furniture-tiaoan', jointTypeId: 'joint-dovetail', name: '条案', era: '明式', position: '翘头与大边端部', loadNote: '燕尾齿肩抵抗案面横向收缩，减少端面开缝。' },
   { id: 'furniture-jiazichuang', jointTypeId: 'joint-corner', name: '架子床', era: '明末清初', position: '围子转角与立柱交会处', loadNote: '三向咬合控制床架角部扭动，保证立柱垂直。' },
@@ -176,11 +197,12 @@ export const db = new MortiseDatabase()
 
 async function writeSeedData(): Promise<void> {
   await db.transaction('rw', [db.joints, db.members, db.steps, db.diagrams, db.furniture], async () => {
-    await db.joints.bulkAdd(jointSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.members.bulkAdd(memberSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.steps.bulkAdd(stepSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.diagrams.bulkAdd(diagramSeeds.map((item) => ({ ...item, schemaRev: 2 })))
-    await db.furniture.bulkAdd(furnitureSeeds.map((item) => ({ ...item, schemaRev: 2 })))
+    const stamp = <T,>(item: Omit<T, 'dataRev'>): T => ({ ...item, schemaRev: 2, dataRev: SEED_DATA_REV } as T)
+    await db.joints.bulkAdd(jointSeeds.map((item) => stamp<JointType>(item)))
+    await db.members.bulkAdd(memberSeeds.map((item) => stamp<Member>(item)))
+    await db.steps.bulkAdd(stepSeeds.map((item) => stamp<DisassemblyStep>(item)))
+    await db.diagrams.bulkAdd(diagramSeeds.map((item) => stamp<Diagram>(item)))
+    await db.furniture.bulkAdd(furnitureSeeds.map((item) => stamp<Furniture>(item)))
   })
 }
 
@@ -190,5 +212,38 @@ export async function ensureSeedData(): Promise<void> {
 }
 
 db.on('populate', () => writeSeedData())
+
+const DEFAULT_META: SyncMeta = {
+  id: 'meta',
+  headDataRev: SEED_DATA_REV,
+  jointRevs: {},
+  fieldMode: false,
+  shopStash: null,
+  fieldBase: null,
+  fieldBatchId: null,
+  fieldExportedAt: null,
+  fieldExportedBy: null,
+}
+
+/** 读取同步元数据；首次访问时惰性落库。外场模式下水位保持在导出时刻，不随改动递增。 */
+export async function getSyncMeta(): Promise<SyncMeta> {
+  const existing = await db.syncMeta.get('meta')
+  if (existing) return existing
+  await db.syncMeta.put({ ...DEFAULT_META })
+  return { ...DEFAULT_META }
+}
+
+export async function saveSyncMeta(patch: Partial<Omit<SyncMeta, 'id'>>): Promise<SyncMeta> {
+  const current = await getSyncMeta()
+  const next = { ...current, ...patch }
+  await db.syncMeta.put(next)
+  return next
+}
+
+/** 店内模式下，任何一次资料改动都把资料水位推进一格。 */
+export async function nextHeadDataRev(): Promise<number> {
+  const meta = await getSyncMeta()
+  return meta.fieldMode ? meta.headDataRev : meta.headDataRev + 1
+}
 
 export type { HitArea }

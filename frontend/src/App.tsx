@@ -1,9 +1,11 @@
 import { NavLink } from 'react-router-dom'
+import { FieldModeBanner } from './components/common/FieldModeBanner'
 import AppRoutes from './router'
 
 const navItems = [
   { to: '/joints', label: '榫卯图鉴' },
   { to: '/furniture', label: '家具反查' },
+  { to: '/sync', label: '外场对账' },
 ]
 
 export default function App() {
@@ -39,6 +41,7 @@ export default function App() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <FieldModeBanner />
         <AppRoutes />
       </main>
       <footer className="mt-12 border-t border-wood-100 bg-white/70">

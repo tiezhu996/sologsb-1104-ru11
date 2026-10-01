@@ -12,4 +12,5 @@ export interface DisassemblyStep {
   riskNote: string
   holdSec: number
   schemaRev?: number
+  dataRev: number
 }

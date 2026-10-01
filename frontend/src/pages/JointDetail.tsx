@@ -2,10 +2,12 @@ import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
 import { DifficultyTag } from '../components/common/DifficultyTag'
+import { RevisionBadge } from '../components/common/RevisionBadge'
 import { SizeField } from '../components/common/SizeField'
 import { StepRail } from '../components/common/StepRail'
 import { useStepOrder } from '../hooks/useStepOrder'
 import { useJointStore } from '../stores/jointStore'
+import { useSyncStore } from '../stores/syncStore'
 import { checkTolerance, formatDimension } from '../utils/measure'
 import { exportJointData } from '../utils/export'
 
@@ -18,11 +20,14 @@ export default function JointDetail() {
   const loading = useJointStore((state) => state.loading)
   const loadAll = useJointStore((state) => state.loadAll)
   const updateMemberDimensions = useJointStore((state) => state.updateMemberDimensions)
+  const syncMeta = useSyncStore((state) => state.meta)
+  const refreshMeta = useSyncStore((state) => state.refreshMeta)
   const { steps, totalDurationSec, currentStepIndex, move, setCurrentStep } = useStepOrder(id)
 
   useEffect(() => {
     void loadAll()
-  }, [loadAll])
+    void refreshMeta()
+  }, [loadAll, refreshMeta])
 
   const joint = joints.find((item) => item.id === id)
   const currentMembers = members
@@ -58,6 +63,7 @@ export default function JointDetail() {
               <span className="rounded-full border border-wood-100 bg-white px-3 py-1 text-xs text-wood-700">{joint.family}</span>
               <DifficultyTag difficulty={joint.difficulty} />
               <span className="text-xs text-stone-500">{joint.glueNeeded ? '建议配合胶合' : '可拆式干装'}</span>
+              <RevisionBadge committedRev={syncMeta.jointRevs[id]} headDataRev={syncMeta.headDataRev} />
             </div>
             <h1 className="mt-5 text-3xl font-bold tracking-tight text-wood-900 sm:text-4xl">{joint.name} · 结构详情</h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-stone-600">{joint.strengthNote}</p>

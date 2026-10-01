@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { BlankPanel } from '../components/common/BlankPanel'
+import { RevisionBadge } from '../components/common/RevisionBadge'
 import { useJointStore } from '../stores/jointStore'
+import { useSyncStore } from '../stores/syncStore'
 import type { FurnitureName } from '../types/furniture'
 
 interface FurnitureFormState {
@@ -26,12 +28,15 @@ export default function FurnitureIndex() {
   const loading = useJointStore((state) => state.loading)
   const loadAll = useJointStore((state) => state.loadAll)
   const addFurniture = useJointStore((state) => state.addFurniture)
+  const syncMeta = useSyncStore((state) => state.meta)
+  const refreshMeta = useSyncStore((state) => state.refreshMeta)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<FurnitureFormState>(initialForm)
 
   useEffect(() => {
     void loadAll()
-  }, [loadAll])
+    void refreshMeta()
+  }, [loadAll, refreshMeta])
 
   useEffect(() => {
     if (!form.jointTypeId && joints[0]) {
@@ -194,9 +199,12 @@ export default function FurnitureIndex() {
                         <span className="rounded-full bg-wood-50 px-2.5 py-1 text-xs text-wood-700">{item.era}</span>
                         <span className="text-sm font-medium text-stone-900">{item.position}</span>
                         {joint ? (
-                          <Link className="ml-auto text-xs font-semibold text-wood-700 underline-offset-4 hover:underline" to={`/joints/${joint.id}`}>
-                            榫卯：{joint.name}
-                          </Link>
+                          <span className="ml-auto inline-flex items-center gap-2">
+                            <RevisionBadge committedRev={syncMeta.jointRevs[joint.id]} headDataRev={syncMeta.headDataRev} compact />
+                            <Link className="text-xs font-semibold text-wood-700 underline-offset-4 hover:underline" to={`/joints/${joint.id}`}>
+                              榫卯：{joint.name}
+                            </Link>
+                          </span>
                         ) : null}
                       </div>
                       <p className="mt-2 text-sm leading-6 text-stone-600">{item.loadNote}</p>

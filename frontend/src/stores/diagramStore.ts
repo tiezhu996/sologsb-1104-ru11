@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Diagram } from '../types/diagram'
 import { db } from '../utils/db'
+import { putWithRev } from '../utils/revision'
 
 interface DiagramState {
   diagrams: Diagram[]
@@ -75,11 +76,11 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
   },
 
   saveDiagram: async (diagram) => {
-    await db.diagrams.put(diagram)
+    const { entity: updated } = await putWithRev(diagram)
     set((state) => ({
-      diagrams: state.diagrams.map((item) => item.id === diagram.id ? diagram : item),
-      draftSvgMarkup: state.selectedDiagramId === diagram.id ? diagram.svgMarkup : state.draftSvgMarkup,
-      draftTitle: state.selectedDiagramId === diagram.id ? diagram.title : state.draftTitle,
+      diagrams: state.diagrams.map((item) => item.id === updated.id ? updated : item),
+      draftSvgMarkup: state.selectedDiagramId === updated.id ? updated.svgMarkup : state.draftSvgMarkup,
+      draftTitle: state.selectedDiagramId === updated.id ? updated.title : state.draftTitle,
     }))
   },
 }))

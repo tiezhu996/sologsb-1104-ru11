@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { DisassemblyStep } from '../types/step'
 import { db } from '../utils/db'
+import { bulkPutWithRev, putWithRev } from '../utils/revision'
 
 interface StepState {
   steps: DisassemblyStep[]
@@ -8,6 +9,7 @@ interface StepState {
   loading: boolean
   loadSteps: (jointTypeId: string) => Promise<void>
   moveStep: (from: number, to: number) => Promise<void>
+  updateStepRiskNote: (stepId: string, riskNote: string) => Promise<void>
   setCurrentStep: (index: number) => void
 }
 
@@ -36,8 +38,17 @@ export const useStepStore = create<StepState>((set, get) => ({
     if (!moved) return
     ordered.splice(to, 0, moved)
     const resequenced = ordered.map((step, index) => ({ ...step, seq: index + 1 }))
-    set({ steps: resequenced, currentStepIndex: to })
-    await db.steps.bulkPut(resequenced)
+    const { entities } = await bulkPutWithRev(resequenced)
+    set({ steps: entities, currentStepIndex: to })
+  },
+
+  updateStepRiskNote: async (stepId, riskNote) => {
+    const current = get().steps.find((step) => step.id === stepId)
+    if (!current) return
+    const { entity: updated } = await putWithRev({ ...current, riskNote })
+    set((state) => ({
+      steps: state.steps.map((step) => (step.id === stepId ? updated : step)),
+    }))
   },
 
   setCurrentStep: (index) => set({
